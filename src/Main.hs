@@ -25,9 +25,10 @@ main = do
 toMeasurements :: [H.Transaction] -> [I.Line UTCTime]
 toMeasurements txns =
   measurements normalValue "normal_raw" txns
-    ++ measurements normalValue "normal_total" (mapMaybe squish daily)
-    ++ measurements costValue   "cost_raw"     txns
-    ++ measurements costValue   "cost_total"   (mapMaybe squish daily)
+    ++ measurements normalValue        "normal_total" (mapMaybe squish daily)
+    ++ measurements costValue          "cost_raw"     txns
+    ++ measurements costValue          "cost_total"   (mapMaybe squish daily)
+    ++ measurements (const [(".", 1)]) "count"        txns
  where
   daily = groupBy ((==) `on` H.tdate) txns
   squish ts@(t:_) = Just t { H.tdescription = "aggregate"
