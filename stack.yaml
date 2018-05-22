@@ -2,3 +2,7 @@ resolver: lts-11.10
 
 packages:
 - .
+
+nix:
+  packages:
+  - zlib

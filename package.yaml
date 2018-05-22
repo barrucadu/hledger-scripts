@@ -14,3 +14,8 @@ executables:
     - -Wall
     dependencies:
     - base
+    - containers
+    - hledger-lib
+    - influxdb
+    - text
+    - time
