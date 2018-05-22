@@ -4,9 +4,9 @@ module Main where
 
 import           Control.Arrow      ((***))
 import           Data.Function      (on)
-import           Data.List          (groupBy, inits, mapAccumL, nub)
+import           Data.List          (groupBy, inits, mapAccumL, nub, sortOn)
 import qualified Data.Map           as M
-import           Data.Maybe         (listToMaybe, mapMaybe)
+import           Data.Maybe         (mapMaybe)
 import           Data.Semigroup     ((<>))
 import           Data.String        (IsString, fromString)
 import qualified Data.Text          as T
@@ -69,10 +69,10 @@ toDeltas txn =
   let postings = concatMap explodeAccount (H.tpostings txn)
       accounts = nub (map H.paccount postings)
   in  M.fromList
-        [ (fromText a, val)
+        [ (fromString (T.unpack (a <> "[" <> cur <> "]")), val)
         | a <- accounts
-        , let ps  = filter ((== a) . H.paccount) postings
-        , let val = sum (mapMaybe (value . H.pamount) ps)
+        , let ps = filter ((== a) . H.paccount) postings
+        , (cur, val) <- sumSame (concatMap (value . H.pamount) ps)
         ]
 
 -------------------------------------------------------------------------------
@@ -83,12 +83,18 @@ explodeAccount p =
   | a <- tail . map (T.intercalate ":") . inits . T.splitOn ":" $ H.paccount p
   ]
 
-value :: H.MixedAmount -> Maybe Double
-value (H.Mixed amounts) = listToMaybe (mapMaybe go amounts)
+value :: H.MixedAmount -> [(T.Text, Double)]
+value (H.Mixed amounts) = map go amounts
  where
-  go (H.Amount _   _ (H.TotalPrice a) _ _) = go a
-  go (H.Amount "£" q _                _ _) = Just (fromRational (toRational q))
-  go _ = Nothing
+  go (H.Amount _ _ (H.TotalPrice a) _ _) = go a
+  go (H.Amount c q _                _ _) = (c, fromRational (toRational q))
+
+sumSame :: (Ord k, Num v) => [(k, v)] -> [(k, v)]
+sumSame = go . sortOn fst
+ where
+  go ((k1, v1):(k2, v2):rest) | k1 == k2  = go ((k1, v1 + v2) : rest)
+                              | otherwise = (k1, v1) : go ((k2, v2) : rest)
+  go xs = xs
 
 fromText :: IsString s => T.Text -> s
 fromText = fromString . T.unpack
