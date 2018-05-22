@@ -23,8 +23,11 @@ main = do
   putStrLn $ "Wrote " ++ show (length measurements) ++ " measurements."
 
 toMeasurements :: [H.Transaction] -> [I.Line UTCTime]
-toMeasurements txns = measurements "raw_normal" txns
-  ++ measurements "total_normal" (mapMaybe squish daily)
+toMeasurements txns =
+  measurements normalValue "normal_raw" txns
+    ++ measurements normalValue "normal_total" (mapMaybe squish daily)
+    ++ measurements costValue   "cost_raw"     txns
+    ++ measurements costValue   "cost_total"   (mapMaybe squish daily)
  where
   daily = groupBy ((==) `on` H.tdate) txns
   squish ts@(t:_) = Just t { H.tdescription = "aggregate"
@@ -32,20 +35,24 @@ toMeasurements txns = measurements "raw_normal" txns
                            }
   squish _ = Nothing
 
-  measurements name =
+  measurements value name =
     concat
       . snd
       . mapAccumL
-          (toInflux (fromText (name <> "_raw")) (fromText (name <> "_delta")))
+          ( toInflux value
+                     (fromText (name <> "_raw"))
+                     (fromText (name <> "_delta"))
+          )
           M.empty
 
 toInflux
-  :: I.Measurement
+  :: (H.MixedAmount -> [(T.Text, Double)])
+  -> I.Measurement
   -> I.Measurement
   -> M.Map I.Key Double
   -> H.Transaction
   -> (M.Map I.Key Double, [I.Line UTCTime])
-toInflux keyT keyD bals txn =
+toInflux value keyT keyD bals txn =
   (bals', map toLine [(keyT, fieldsT), (keyD, fieldsD)])
  where
   toLine (k, fs) = Line k tags fs (Just time)
@@ -62,10 +69,13 @@ toInflux keyT keyD bals txn =
   fieldsT = fmap I.FieldFloat bals'
   fieldsD = fmap I.FieldFloat deltas
   bals'   = M.unionWith (+) bals deltas
-  deltas  = toDeltas txn
+  deltas  = toDeltas value txn
 
-toDeltas :: H.Transaction -> M.Map I.Key Double
-toDeltas txn =
+toDeltas
+  :: (H.MixedAmount -> [(T.Text, Double)])
+  -> H.Transaction
+  -> M.Map I.Key Double
+toDeltas value txn =
   let postings = concatMap explodeAccount (H.tpostings txn)
       accounts = nub (map H.paccount postings)
   in  M.fromList
@@ -83,8 +93,12 @@ explodeAccount p =
   | a <- tail . map (T.intercalate ":") . inits . T.splitOn ":" $ H.paccount p
   ]
 
-value :: H.MixedAmount -> [(T.Text, Double)]
-value (H.Mixed amounts) = map go amounts
+normalValue :: H.MixedAmount -> [(T.Text, Double)]
+normalValue (H.Mixed amounts) = map go amounts
+  where go (H.Amount c q _ _ _) = (c, fromRational (toRational q))
+
+costValue :: H.MixedAmount -> [(T.Text, Double)]
+costValue (H.Mixed amounts) = map go amounts
  where
   go (H.Amount _ _ (H.TotalPrice a) _ _) = go a
   go (H.Amount c q _                _ _) = (c, fromRational (toRational q))
