@@ -2,6 +2,7 @@
 
 module Main where
 
+import           Control.Arrow      ((***))
 import           Data.Function      (on)
 import           Data.List          (groupBy, inits, mapAccumL, nub)
 import qualified Data.Map           as M
@@ -48,8 +49,16 @@ toInflux keyT keyD bals txn =
   (bals', map toLine [(keyT, fieldsT), (keyD, fieldsD)])
  where
   toLine (k, fs) = Line k tags fs (Just time)
-  time    = UTCTime (H.tdate txn) 0
-  tags    = M.singleton "description" (fromText (H.tdescription txn))
+  time = UTCTime (H.tdate txn) 0
+  tags =
+    M.fromList
+      .  map (fromText *** fromText)
+      .  filter (not . T.null . snd)
+      $  [ ("code"       , H.tcode txn)
+         , ("description", H.tdescription txn)
+         , ("status"     , showStatus (H.tstatus txn))
+         ]
+      ++ H.ttags txn
   fieldsT = fmap I.FieldFloat bals'
   fieldsD = fmap I.FieldFloat deltas
   bals'   = M.unionWith (+) bals deltas
@@ -83,3 +92,8 @@ value (H.Mixed amounts) = listToMaybe (mapMaybe go amounts)
 
 fromText :: IsString s => T.Text -> s
 fromText = fromString . T.unpack
+
+showStatus :: H.Status -> T.Text
+showStatus H.Cleared  = "cleared"
+showStatus H.Pending  = "pending"
+showStatus H.Unmarked = "uncleared"
