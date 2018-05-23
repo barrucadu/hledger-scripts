@@ -2,7 +2,7 @@
 
 module Main where
 
-import           Control.Arrow      (first, (***))
+import           Control.Arrow      (first, second, (***))
 import           Data.Function      (on)
 import           Data.List          (groupBy, inits, mapAccumL, nub, sortOn)
 import qualified Data.Map           as M
@@ -109,8 +109,10 @@ normalValue (H.Mixed amounts) = map go amounts
 costValue :: H.MixedAmount -> [(T.Text, Double)]
 costValue (H.Mixed amounts) = map go amounts
  where
-  go (H.Amount _ _ (H.TotalPrice a) _ _) = go a
-  go (H.Amount c q _                _ _) = (c, fromRational (toRational q))
+  go (H.Amount _ q (H.TotalPrice a) _ _) = second (* signum (doub q)) (go a)
+  go (H.Amount c q _                _ _) = (c, doub q)
+
+  doub = fromRational . toRational
 
 sumSame :: (Ord k, Num v) => [(k, v)] -> [(k, v)]
 sumSame = go . sortOn fst
