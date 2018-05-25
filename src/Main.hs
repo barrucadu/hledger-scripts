@@ -64,13 +64,13 @@ toMeasurements prices txns =
 toInflux
   :: Ord k
   => (k -> I.Key)
-  -> (Day -> k -> Double -> [(k, Double)])
-  -> (H.Transaction -> [(k, Double)])
+  -> (Day -> k -> Decimal -> [(k, Decimal)])
+  -> (H.Transaction -> [(k, Decimal)])
   -> I.Measurement
   -> I.Measurement
-  -> M.Map k Double
+  -> M.Map k Decimal
   -> H.Transaction
-  -> (M.Map k Double, [I.Line UTCTime])
+  -> (M.Map k Decimal, [I.Line UTCTime])
 toInflux toKey transform deltaf keyT keyD state txn =
   (state', map toLine [(keyT, fieldsT), (keyD, fieldsD)])
  where
@@ -94,15 +94,15 @@ toInflux toKey transform deltaf keyT keyD state txn =
 
   toFields =
     M.fromList
-      . map (toKey *** I.FieldFloat)
+      . map (toKey *** (I.FieldFloat . doub))
       . sumSame
       . concatMap (uncurry (transform (H.tdate txn)))
       . M.toList
 
 toDeltas
-  :: (Day -> H.MixedAmount -> [(H.CommoditySymbol, Double)])
+  :: (Day -> H.MixedAmount -> [(H.CommoditySymbol, Decimal)])
   -> H.Transaction
-  -> [((H.AccountName, H.CommoditySymbol), Double)]
+  -> [((H.AccountName, H.CommoditySymbol), Decimal)]
 toDeltas value txn =
   let postings = concatMap explodeAccount (H.tpostings txn)
       accounts = nub (map H.paccount postings)
@@ -114,24 +114,24 @@ toDeltas value txn =
 
 -------------------------------------------------------------------------------
 
-normalValue :: a -> H.MixedAmount -> [(H.CommoditySymbol, Double)]
+normalValue :: a -> H.MixedAmount -> [(H.CommoditySymbol, Decimal)]
 normalValue _ (H.Mixed amounts) = map go amounts
-  where go (H.Amount c q _ _ _) = (c, doub q)
+  where go (H.Amount c q _ _ _) = (c, q)
 
-costValue :: a -> H.MixedAmount -> [(H.CommoditySymbol, Double)]
+costValue :: a -> H.MixedAmount -> [(H.CommoditySymbol, Decimal)]
 costValue _ (H.Mixed amounts) = map go amounts
  where
-  go (H.Amount _ q (H.TotalPrice a) _ _) = second (* signum (doub q)) (go a)
-  go (H.Amount c q _                _ _) = (c, doub q)
+  go (H.Amount _ q (H.TotalPrice a) _ _) = second (* signum q) (go a)
+  go (H.Amount c q _                _ _) = (c, q)
 
 marketValue
   :: M.Map H.CommoditySymbol [(Day, H.Amount)]
   -> Day
   -> (H.AccountName, H.CommoditySymbol)
-  -> Double
-  -> [((H.AccountName, H.CommoditySymbol), Double)]
+  -> Decimal
+  -> [((H.AccountName, H.CommoditySymbol), Decimal)]
 marketValue prices day (a, c) q =
-  [ ((a, c'), doub factor * q) | (c', factor) <- (c, 1) : factors ]
+  [ ((a, c'), factor * q) | (c', factor) <- (c, 1) : factors ]
   where factors = findFactors day (M.findWithDefault [] c prices)
 
 -------------------------------------------------------------------------------
