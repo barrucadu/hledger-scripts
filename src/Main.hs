@@ -2,14 +2,18 @@
 
 module Main where
 
-import           Control.Arrow      (first, second, (***))
+import           Control.Arrow      (second, (***))
+import           Data.Decimal       (Decimal)
 import           Data.Function      (on)
-import           Data.List          (groupBy, inits, mapAccumL, nub, sortOn)
+import           Data.List          (groupBy, inits, mapAccumL, nub, sortBy,
+                                     sortOn)
 import qualified Data.Map           as M
 import           Data.Maybe         (mapMaybe)
 import           Data.Semigroup     ((<>))
+import qualified Data.Set           as S
 import           Data.String        (IsString, fromString)
 import qualified Data.Text          as T
+import           Data.Time.Calendar (Day)
 import           Data.Time.Clock    (UTCTime (..))
 import           Database.InfluxDB  as I
 import           Hledger.Data.Types as H
@@ -18,23 +22,27 @@ import           Hledger.Read       as H
 main :: IO ()
 main = do
   journal <- H.defaultJournal
-  let measurements = toMeasurements (H.jtxns journal)
+  let measurements = toMeasurements (H.jmarketprices journal) (H.jtxns journal)
   I.writeBatch (I.writeParams "finance") measurements
   putStrLn $ "Wrote " ++ show (length measurements) ++ " measurements."
 
-toMeasurements :: [H.Transaction] -> [I.Line UTCTime]
-toMeasurements txns =
-  measurements (balancesToInflux normalValue) "normal_raw" txns
-    ++ measurements (balancesToInflux normalValue)
-                    "normal_total"
-                    (mapMaybe squish daily)
-    ++ measurements (balancesToInflux costValue) "cost_raw" txns
-    ++ measurements (balancesToInflux costValue)
-                    "cost_total"
-                    (mapMaybe squish daily)
-    ++ measurements countToInflux "count" txns
+toMeasurements :: [H.MarketPrice] -> [H.Transaction] -> [I.Line UTCTime]
+toMeasurements prices txns =
+  measurements nvalue "normal_raw" txns
+    ++ measurements nvalue        "normal_total" dailies
+    ++ measurements cvalue        "cost_raw"     txns
+    ++ measurements cvalue        "cost_total"   dailies
+    ++ measurements mvalue        "market_raw"   txns
+    ++ measurements mvalue        "market_total" dailies
+    ++ measurements countToInflux "count"        txns
  where
-  daily = groupBy ((==) `on` H.tdate) txns
+  nvalue = balancesToInflux normalValue
+  cvalue = balancesToInflux costValue
+  mvalue = toInflux accountKey
+                    (marketValue (buildPrices prices))
+                    (toDeltas normalValue)
+
+  dailies = mapMaybe squish $ groupBy ((==) `on` H.tdate) txns
   squish ts@(t:_) = Just t { H.tdescription = "aggregate"
                            , H.tpostings    = concatMap H.tpostings ts
                            }
@@ -47,20 +55,23 @@ toMeasurements txns =
           (toL (fromText (name <> "_raw")) (fromText (name <> "_delta")))
           M.empty
 
-  balancesToInflux = toInflux . toDeltas
-  countToInflux    = toInflux $ \txn ->
+  balancesToInflux = toInflux accountKey (\_ ac q -> [(ac, q)]) . toDeltas
+  countToInflux    = toInflux fromText (\_ ac q -> [(ac, q)]) $ \txn ->
     [ (showStatus status, if H.tstatus txn == status then 1 else 0)
     | status <- [minBound .. maxBound]
     ]
 
 toInflux
-  :: (H.Transaction -> [(T.Text, Double)])
+  :: Ord k
+  => (k -> I.Key)
+  -> (Day -> k -> Double -> [(k, Double)])
+  -> (H.Transaction -> [(k, Double)])
   -> I.Measurement
   -> I.Measurement
-  -> M.Map I.Key Double
+  -> M.Map k Double
   -> H.Transaction
-  -> (M.Map I.Key Double, [I.Line UTCTime])
-toInflux deltaf keyT keyD state txn =
+  -> (M.Map k Double, [I.Line UTCTime])
+toInflux toKey transform deltaf keyT keyD state txn =
   (state', map toLine [(keyT, fieldsT), (keyD, fieldsD)])
  where
   toLine (key, fields) = Line key tags fields (Just time)
@@ -75,24 +86,67 @@ toInflux deltaf keyT keyD state txn =
          ]
       ++ H.ttags txn
 
-  fieldsT = fmap I.FieldFloat state'
-  fieldsD = fmap I.FieldFloat deltas
+  fieldsT = toFields state'
+  fieldsD = toFields deltas
 
   state'  = M.unionWith (+) state deltas
-  deltas  = M.fromList $ map (first fromText) (deltaf txn)
+  deltas  = M.fromList (deltaf txn)
+
+  toFields =
+    M.fromList
+      . map (toKey *** I.FieldFloat)
+      . sumSame
+      . concatMap (uncurry (transform (H.tdate txn)))
+      . M.toList
 
 toDeltas
-  :: (H.MixedAmount -> [(T.Text, Double)])
+  :: (Day -> H.MixedAmount -> [(H.CommoditySymbol, Double)])
   -> H.Transaction
-  -> [(T.Text, Double)]
+  -> [((H.AccountName, H.CommoditySymbol), Double)]
 toDeltas value txn =
   let postings = concatMap explodeAccount (H.tpostings txn)
       accounts = nub (map H.paccount postings)
-  in  [ (a <> "[" <> cur <> "]", val)
+  in  [ ((a, cur), val)
       | a <- accounts
       , let ps = filter ((== a) . H.paccount) postings
-      , (cur, val) <- sumSame (concatMap (value . H.pamount) ps)
+      , (cur, val) <- sumSame (concatMap (value (tdate txn) . H.pamount) ps)
       ]
+
+-------------------------------------------------------------------------------
+
+normalValue :: a -> H.MixedAmount -> [(H.CommoditySymbol, Double)]
+normalValue _ (H.Mixed amounts) = map go amounts
+  where go (H.Amount c q _ _ _) = (c, doub q)
+
+costValue :: a -> H.MixedAmount -> [(H.CommoditySymbol, Double)]
+costValue _ (H.Mixed amounts) = map go amounts
+ where
+  go (H.Amount _ q (H.TotalPrice a) _ _) = second (* signum (doub q)) (go a)
+  go (H.Amount c q _                _ _) = (c, doub q)
+
+marketValue
+  :: M.Map H.CommoditySymbol [(Day, H.Amount)]
+  -> Day
+  -> (H.AccountName, H.CommoditySymbol)
+  -> Double
+  -> [((H.AccountName, H.CommoditySymbol), Double)]
+marketValue prices day (a, c) q =
+  [ ((a, c'), doub factor * q) | (c', factor) <- (c, 1) : factors ]
+  where factors = findFactors day (M.findWithDefault [] c prices)
+
+-------------------------------------------------------------------------------
+
+buildPrices :: [H.MarketPrice] -> M.Map H.CommoditySymbol [(Day, H.Amount)]
+buildPrices = fmap (sortBy (flip compare)) . foldr go M.empty
+  where go p = M.insertWith (++) (H.mpcommodity p) [(H.mpdate p, H.mpamount p)]
+
+findFactors :: Day -> [(Day, H.Amount)] -> [(H.CommoditySymbol, Decimal)]
+findFactors day = go S.empty . dropWhile ((> day) . fst)
+ where
+  go commodities ((_, H.Amount c q _ _ _):rest)
+    | c `S.member` commodities = go commodities rest
+    | otherwise                = (c, q) : go (c `S.insert` commodities) rest
+  go _ [] = []
 
 -------------------------------------------------------------------------------
 
@@ -102,24 +156,15 @@ explodeAccount p =
   | a <- tail . map (T.intercalate ":") . inits . T.splitOn ":" $ H.paccount p
   ]
 
-normalValue :: H.MixedAmount -> [(T.Text, Double)]
-normalValue (H.Mixed amounts) = map go amounts
-  where go (H.Amount c q _ _ _) = (c, fromRational (toRational q))
-
-costValue :: H.MixedAmount -> [(T.Text, Double)]
-costValue (H.Mixed amounts) = map go amounts
- where
-  go (H.Amount _ q (H.TotalPrice a) _ _) = second (* signum (doub q)) (go a)
-  go (H.Amount c q _                _ _) = (c, doub q)
-
-  doub = fromRational . toRational
-
 sumSame :: (Ord k, Num v) => [(k, v)] -> [(k, v)]
 sumSame = go . sortOn fst
  where
   go ((k1, v1):(k2, v2):rest) | k1 == k2  = go ((k1, v1 + v2) : rest)
                               | otherwise = (k1, v1) : go ((k2, v2) : rest)
   go xs = xs
+
+doub :: Decimal -> Double
+doub = fromRational . toRational
 
 fromText :: IsString s => T.Text -> s
 fromText = fromString . T.unpack
@@ -128,3 +173,6 @@ showStatus :: H.Status -> T.Text
 showStatus H.Cleared  = "cleared"
 showStatus H.Pending  = "pending"
 showStatus H.Unmarked = "uncleared"
+
+accountKey :: (H.AccountName, H.CommoditySymbol) -> I.Key
+accountKey (a, c) = fromText $ a <> "[" <> c <> "]"

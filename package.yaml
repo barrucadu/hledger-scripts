@@ -15,6 +15,7 @@ executables:
     dependencies:
     - base
     - containers
+    - Decimal
     - hledger-lib
     - influxdb
     - text
