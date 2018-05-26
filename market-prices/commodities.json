@@ -5,7 +5,7 @@
   , "EUR":   { "provider": "ft_currency" }
   , "JPY":   { "provider": "ft_currency" }
   , "USD":   { "provider": "ft_currency" }
-  , "VADEA": { "provider": "ft_fund", "isin": "GB00B41XG308" }
+  , "VANEA": { "provider": "ft_fund", "isin": "GB00B41XG308" }
   }
 , "symbols": { "GBP": "£" }
 }
