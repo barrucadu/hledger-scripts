@@ -52,6 +52,7 @@ are:
     - `delta`, means the difference in value of accounts is reported
 - `count_total`, which is the total number of transactions
 - `count_delta`, which is `1` for each transaction
+- `market`, which is the market value of each commodity
 
 Inside these measurements are values for accounts and currencies.
 It's probably easiest to explore these through a tool

@@ -35,6 +35,7 @@ toMeasurements prices txns =
     ++ measurements mvalue        "market_txns"    txns
     ++ measurements mvalue        "market_dailies" dailies
     ++ measurements countToInflux "count"          txns
+    ++ measurements priceToInflux "market"         prices
  where
   nvalue = balancesToInflux normalValue
   cvalue = balancesToInflux costValue
@@ -98,6 +99,21 @@ toInflux toKey transform deltaf keyT keyD state txn =
       . sumSame
       . concatMap (uncurry (transform (H.tdate txn)))
       . M.toList
+
+priceToInflux
+  :: a
+  -> b
+  -> M.Map (H.CommoditySymbol, H.CommoditySymbol) Decimal
+  -> H.MarketPrice
+  -> ( M.Map (H.CommoditySymbol, H.CommoditySymbol) Decimal
+     , [I.Line UTCTime]
+     )
+priceToInflux _ _ state (H.MarketPrice day c (H.Amount c' q' _ _ _)) =
+  (state', [Line "market" M.empty fields (Just (UTCTime day 0))])
+ where
+  fields   = toFields state'
+  state'   = M.insert (c, c') q' state
+  toFields = M.fromList . map (priceKey *** (I.FieldFloat . doub)) . M.toList
 
 toDeltas
   :: (Day -> H.MixedAmount -> [(H.CommoditySymbol, Decimal)])
@@ -176,3 +192,6 @@ showStatus H.Unmarked = "uncleared"
 
 accountKey :: (H.AccountName, H.CommoditySymbol) -> I.Key
 accountKey (a, c) = fromText $ a <> "[" <> c <> "]"
+
+priceKey :: (H.CommoditySymbol, H.CommoditySymbol) -> I.Key
+priceKey (c, c') = fromText $ c <> "[" <> c' <> "]"
