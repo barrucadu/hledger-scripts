@@ -28,13 +28,13 @@ main = do
 
 toMeasurements :: [H.MarketPrice] -> [H.Transaction] -> [I.Line UTCTime]
 toMeasurements prices txns =
-  measurements nvalue "normal_raw" txns
-    ++ measurements nvalue        "normal_total" dailies
-    ++ measurements cvalue        "cost_raw"     txns
-    ++ measurements cvalue        "cost_total"   dailies
-    ++ measurements mvalue        "market_raw"   txns
-    ++ measurements mvalue        "market_total" dailies
-    ++ measurements countToInflux "count"        txns
+  measurements nvalue "normal_txns" txns
+    ++ measurements nvalue        "normal_dailies" dailies
+    ++ measurements cvalue        "cost_txns"      txns
+    ++ measurements cvalue        "cost_dailies"   dailies
+    ++ measurements mvalue        "market_txns"    txns
+    ++ measurements mvalue        "market_dailies" dailies
+    ++ measurements countToInflux "count"          txns
  where
   nvalue = balancesToInflux normalValue
   cvalue = balancesToInflux costValue
@@ -52,7 +52,7 @@ toMeasurements prices txns =
     concat
       . snd
       . mapAccumL
-          (toL (fromText (name <> "_raw")) (fromText (name <> "_delta")))
+          (toL (fromText (name <> "_total")) (fromText (name <> "_delta")))
           M.empty
 
   balancesToInflux = toInflux accountKey (\_ ac q -> [(ac, q)]) . toDeltas
