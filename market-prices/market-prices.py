@@ -54,29 +54,34 @@ def get_ft_fund(isin, currency):
 
 
 config = json.load(sys.stdin)
-for provider, commodities in config.items():
-    for commodity, cconfig in commodities.items():
+for commodity, cconfig in config.items():
+    try:
         try:
-            currency = cconfig.get('currency', 'GBP')
-            if provider == 'coinbase':
-                rate = get_coinbase(
-                    cconfig.get('base', commodity),
-                    currency)
-            elif provider == 'ft_currency':
-                rate = get_ft_currency(
-                    cconfig.get('base', commodity),
-                    currency)
-            elif provider == 'ft_fund':
-                rate = get_ft_fund(
-                    cconfig.get('isin', commodity),
-                    currency)
-            else:
-                raise Exception("unknown provider")
+            provider = cconfig['provider']
+        except KeyError:
+            raise Exception("missing provider")
 
-            date = time.strftime('%Y-%m-%d')
-            if currency == 'GBP':
-                print('P {} {} £{}'.format(date, commodity, rate))
-            else:
-                print('P {} {} {} {}'.format(date, commodity, rate, currency))
-        except Exception as e:
-            print("; error processing commodity '{}' for provider '{}': {}".format(commodity, provider, e))
+        currency = cconfig.get('currency', 'GBP')
+
+        if provider == 'coinbase':
+            rate = get_coinbase(
+                cconfig.get('base', commodity),
+                currency)
+        elif provider == 'ft_currency':
+            rate = get_ft_currency(
+                cconfig.get('base', commodity),
+                currency)
+        elif provider == 'ft_fund':
+            rate = get_ft_fund(
+                cconfig.get('isin', commodity),
+                currency)
+        else:
+            raise Exception("unknown provider '{}'".format(provider))
+
+        date = time.strftime('%Y-%m-%d')
+        if currency == 'GBP':
+            print('P {} {} £{}'.format(date, commodity, rate))
+        else:
+            print('P {} {} {} {}'.format(date, commodity, rate, currency))
+    except Exception as e:
+        print("; error processing commodity '{}': {}".format(commodity, e))

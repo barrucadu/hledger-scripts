@@ -1,13 +1,7 @@
-{ "coinbase":
-  { "BTC": {}
-  , "ETH": {}
-  , "LTC": {}
-  }
-, "ft_currency":
-  { "EUR": {}
-  , "JPY": {}
-  }
-, "ft_fund":
-  { "VANEA": { "isin": "GB00B41XG308" }
-  }
+{ "BTC":   { "provider": "coinbase" }
+, "ETH":   { "provider": "coinbase" }
+, "LTC":   { "provider": "coinbase" }
+, "EUR":   { "provider": "ft_currency" }
+, "JPY":   { "provider": "ft_currency" }
+, "VADEA": { "provider": "ft_fund", "isin": "GB00B41XG308" }
 }
