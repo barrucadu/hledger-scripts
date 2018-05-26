@@ -1,0 +1,13 @@
+{ "coinbase":
+  { "BTC": {}
+  , "ETH": {}
+  , "LTC": {}
+  }
+, "ft_currency":
+  { "EUR": {}
+  , "JPY": {}
+  }
+, "ft_fund":
+  { "VANEA": { "isin": "GB00B41XG308" }
+  }
+}
