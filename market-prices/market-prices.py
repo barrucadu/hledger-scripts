@@ -54,7 +54,8 @@ def get_ft_fund(isin, currency):
 
 
 config = json.load(sys.stdin)
-for commodity, cconfig in config.items():
+symbols = config.get('symbols', {})
+for commodity, cconfig in config.get('commodities', {}).items():
     try:
         try:
             provider = cconfig['provider']
@@ -79,8 +80,8 @@ for commodity, cconfig in config.items():
             raise Exception("unknown provider '{}'".format(provider))
 
         date = time.strftime('%Y-%m-%d')
-        if currency == 'GBP':
-            print('P {} {} £{}'.format(date, commodity, rate))
+        if currency in symbols:
+            print('P {} {} {}{}'.format(date, commodity, symbols[currency], rate))
         else:
             print('P {} {} {} {}'.format(date, commodity, rate, currency))
     except Exception as e:
