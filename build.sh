@@ -4,8 +4,7 @@
 set -e
 
 cd hledger-to-influxdb
-
-stylish-haskell -i src/Main.hs
-brittany --write-mode inplace src/Main.hs
+find . -name '*.hs' -exec stylish-haskell -i {} \;
+find . -name '*.hs' -exec brittany --write-mode inplace {} \;
 hlint src
 stack build --nix

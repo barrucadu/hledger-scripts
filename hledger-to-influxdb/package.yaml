@@ -10,6 +10,8 @@ executables:
   hledger-to-influxdb:
     main: Main.hs
     source-dirs: src
+    other-modules:
+    - Graph
     ghc-options:
     - -Wall
     dependencies:

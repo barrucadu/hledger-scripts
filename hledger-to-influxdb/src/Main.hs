@@ -5,12 +5,10 @@ module Main where
 import           Control.Arrow      (second, (***))
 import           Data.Decimal       (Decimal)
 import           Data.Function      (on)
-import           Data.List          (groupBy, inits, mapAccumL, nub, sortBy,
-                                     sortOn)
+import           Data.List          (groupBy, inits, mapAccumL, nub, sortOn)
 import qualified Data.Map           as M
 import           Data.Maybe         (mapMaybe)
 import           Data.Semigroup     ((<>))
-import qualified Data.Set           as S
 import           Data.String        (IsString, fromString)
 import qualified Data.Text          as T
 import           Data.Time.Calendar (Day)
@@ -18,6 +16,8 @@ import           Data.Time.Clock    (UTCTime (..))
 import           Database.InfluxDB  as I
 import           Hledger.Data.Types as H
 import           Hledger.Read       as H
+
+import qualified Graph              as G
 
 main :: IO ()
 main = do
@@ -141,28 +141,39 @@ costValue _ (H.Mixed amounts) = map go amounts
   go (H.Amount c q _                _ _) = (c, q)
 
 marketValue
-  :: M.Map H.CommoditySymbol [(Day, H.Amount)]
+  :: [(Day, G.Graph H.CommoditySymbol Decimal)]
   -> Day
   -> (H.AccountName, H.CommoditySymbol)
   -> Decimal
   -> [((H.AccountName, H.CommoditySymbol), Decimal)]
 marketValue prices day (a, c) q =
-  [ ((a, c'), factor * q) | (c', factor) <- (c, 1) : factors ]
-  where factors = findFactors day (M.findWithDefault [] c prices)
+  [ ((a, c'), factor * q) | (c', factor) <- factors ]
+  where factors = findFactors c . map snd . dropWhile ((> day) . fst) $ prices
 
 -------------------------------------------------------------------------------
 
-buildPrices :: [H.MarketPrice] -> M.Map H.CommoditySymbol [(Day, H.Amount)]
-buildPrices = fmap (sortBy (flip compare)) . foldr go M.empty
-  where go p = M.insertWith (++) (H.mpcommodity p) [(H.mpdate p, H.mpamount p)]
-
-findFactors :: Day -> [(Day, H.Amount)] -> [(H.CommoditySymbol, Decimal)]
-findFactors day = go S.empty . dropWhile ((> day) . fst)
+buildPrices :: [H.MarketPrice] -> [(Day, G.Graph H.CommoditySymbol Decimal)]
+buildPrices prices0 =
+  reverse . map (second close) . graphs G.empty . sortOn fst $ prices
  where
-  go commodities ((_, H.Amount c q _ _ _):rest)
-    | c `S.member` commodities = go commodities rest
-    | otherwise                = (c, q) : go (c `S.insert` commodities) rest
-  go _ [] = []
+  prices = [ (H.mpdate p, (H.mpcommodity p, H.mpamount p)) | p <- prices0 ]
+
+  graphs g ((day, (c, H.Amount c' q _ _ _)):rest) =
+    let g' = G.addEdge const c c' q . G.addNode c' . G.addNode c $ g
+    in  case rest of
+          ((day', _):_) | day == day' -> graphs g' rest
+          _                           -> (day, g') : graphs g' rest
+  graphs _ [] = []
+
+  close =
+    G.transitiveClosure (*) . G.symmetricClosure (1 /) . G.reflexiveClosure 1
+
+findFactors
+  :: H.CommoditySymbol
+  -> [G.Graph H.CommoditySymbol Decimal]
+  -> [(H.CommoditySymbol, Decimal)]
+findFactors c []    = [(c, 1)]
+findFactors c (g:_) = M.assocs (M.findWithDefault (M.singleton c 1) c g)
 
 -------------------------------------------------------------------------------
 
