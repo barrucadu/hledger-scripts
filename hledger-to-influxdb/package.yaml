@@ -1,6 +1,6 @@
 name: hledger-to-influxdb
 version: 0.1.0.0
-github: barrucadu/hledger-to-influxdb
+github: barrucadu/hledger-scripts
 license: MIT
 author: Michael Walker
 maintainer: mike@barrucadu.co.uk
