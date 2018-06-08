@@ -2,10 +2,10 @@
 
 module Main where
 
-import           Control.Arrow      (second, (***))
+import           Control.Arrow      ((***))
 import           Data.Decimal       (Decimal)
 import           Data.Function      (on)
-import           Data.List          (groupBy, inits, mapAccumL, nub, sortOn)
+import           Data.List          (groupBy, mapAccumL, nub)
 import qualified Data.Map           as M
 import           Data.Maybe         (mapMaybe)
 import           Data.Semigroup     ((<>))
@@ -17,7 +17,7 @@ import           Database.InfluxDB  as I
 import           Hledger.Data.Types as H
 import           Hledger.Read       as H
 
-import qualified Graph              as G
+import qualified Extras             as E
 
 main :: IO ()
 main = do
@@ -37,11 +37,11 @@ toMeasurements prices txns =
     ++ measurements countToInflux "count"          txns
     ++ measurements priceToInflux "market"         prices
  where
-  nvalue = balancesToInflux normalValue
-  cvalue = balancesToInflux costValue
+  nvalue = balancesToInflux (const E.normalValue)
+  cvalue = balancesToInflux (const E.costValue)
   mvalue = toInflux accountKey
-                    (marketValue (buildPrices prices))
-                    (toDeltas normalValue)
+                    (E.marketValue (E.buildPrices prices))
+                    (toDeltas (const E.normalValue))
 
   dailies = mapMaybe squish $ groupBy ((==) `on` H.tdate) txns
   squish ts@(t:_) = Just t { H.tdescription = "aggregate"
@@ -95,8 +95,8 @@ toInflux toKey transform deltaf keyT keyD state txn =
 
   toFields =
     M.fromList
-      . map (toKey *** (I.FieldFloat . doub))
-      . sumSame
+      . map (toKey *** (I.FieldFloat . E.doub))
+      . E.sumSame
       . concatMap (uncurry (transform (H.tdate txn)))
       . M.toList
 
@@ -113,85 +113,22 @@ priceToInflux _ _ state (H.MarketPrice day c (H.Amount c' q' _ _ _)) =
  where
   fields   = toFields state'
   state'   = M.insert (c, c') q' state
-  toFields = M.fromList . map (priceKey *** (I.FieldFloat . doub)) . M.toList
+  toFields = M.fromList . map (priceKey *** (I.FieldFloat . E.doub)) . M.toList
 
 toDeltas
   :: (Day -> H.MixedAmount -> [(H.CommoditySymbol, Decimal)])
   -> H.Transaction
   -> [((H.AccountName, H.CommoditySymbol), Decimal)]
 toDeltas value txn =
-  let postings = concatMap explodeAccount (H.tpostings txn)
+  let postings = concatMap E.explodeAccount (H.tpostings txn)
       accounts = nub (map H.paccount postings)
   in  [ ((a, cur), val)
       | a <- accounts
       , let ps = filter ((== a) . H.paccount) postings
-      , (cur, val) <- sumSame (concatMap (value (tdate txn) . H.pamount) ps)
+      , (cur, val) <- E.sumSame (concatMap (value (tdate txn) . H.pamount) ps)
       ]
 
 -------------------------------------------------------------------------------
-
-normalValue :: a -> H.MixedAmount -> [(H.CommoditySymbol, Decimal)]
-normalValue _ (H.Mixed amounts) = map go amounts
-  where go (H.Amount c q _ _ _) = (c, q)
-
-costValue :: a -> H.MixedAmount -> [(H.CommoditySymbol, Decimal)]
-costValue _ (H.Mixed amounts) = map go amounts
- where
-  go (H.Amount _ q (H.TotalPrice a) _ _) = second (* signum q) (go a)
-  go (H.Amount c q _                _ _) = (c, q)
-
-marketValue
-  :: [(Day, G.Graph H.CommoditySymbol Decimal)]
-  -> Day
-  -> (H.AccountName, H.CommoditySymbol)
-  -> Decimal
-  -> [((H.AccountName, H.CommoditySymbol), Decimal)]
-marketValue prices day (a, c) q =
-  [ ((a, c'), factor * q) | (c', factor) <- factors ]
-  where factors = findFactors c . map snd . dropWhile ((> day) . fst) $ prices
-
--------------------------------------------------------------------------------
-
-buildPrices :: [H.MarketPrice] -> [(Day, G.Graph H.CommoditySymbol Decimal)]
-buildPrices prices0 =
-  reverse . map (second close) . graphs G.empty . sortOn fst $ prices
- where
-  prices = [ (H.mpdate p, (H.mpcommodity p, H.mpamount p)) | p <- prices0 ]
-
-  graphs g ((day, (c, H.Amount c' q _ _ _)):rest) =
-    let g' = G.addEdge const c c' q . G.addNode c' . G.addNode c $ g
-    in  case rest of
-          ((day', _):_) | day == day' -> graphs g' rest
-          _                           -> (day, g') : graphs g' rest
-  graphs _ [] = []
-
-  close =
-    G.transitiveClosure (*) . G.symmetricClosure (1 /) . G.reflexiveClosure 1
-
-findFactors
-  :: H.CommoditySymbol
-  -> [G.Graph H.CommoditySymbol Decimal]
-  -> [(H.CommoditySymbol, Decimal)]
-findFactors c []    = [(c, 1)]
-findFactors c (g:_) = M.assocs (M.findWithDefault (M.singleton c 1) c g)
-
--------------------------------------------------------------------------------
-
-explodeAccount :: H.Posting -> [H.Posting]
-explodeAccount p =
-  [ p { H.paccount = a }
-  | a <- tail . map (T.intercalate ":") . inits . T.splitOn ":" $ H.paccount p
-  ]
-
-sumSame :: (Ord k, Num v) => [(k, v)] -> [(k, v)]
-sumSame = go . sortOn fst
- where
-  go ((k1, v1):(k2, v2):rest) | k1 == k2  = go ((k1, v1 + v2) : rest)
-                              | otherwise = (k1, v1) : go ((k2, v2) : rest)
-  go xs = xs
-
-doub :: Decimal -> Double
-doub = fromRational . toRational
 
 fromText :: IsString s => T.Text -> s
 fromText = fromString . T.unpack

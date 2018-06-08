@@ -3,8 +3,16 @@
 
 set -e
 
-cd hledger-to-influxdb
+# first style + lint
 find . -name '*.hs' -exec stylish-haskell -i {} \;
 find . -name '*.hs' -exec brittany --write-mode inplace {} \;
-hlint src
-stack build --nix
+hlint .
+
+# then build
+for dir in *; do
+  if [[ -d "$dir" ]] && [[ -e "$dir/stack.yaml" ]]; then
+    pushd $dir
+    stack build --nix
+    popd
+  fi
+done

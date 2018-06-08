@@ -62,6 +62,7 @@ transitiveClosure combine = fixEq step
    where
     find (a1:a2:as) | a1 == a2  = a1
                     | otherwise = find (a2 : as)
+    find _ = error "unreachable"
 
   step graph = foldr
     (.)
