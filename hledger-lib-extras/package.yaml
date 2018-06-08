@@ -19,4 +19,5 @@ library:
   - containers
   - Decimal
   - hledger-lib
+  - text
   - time

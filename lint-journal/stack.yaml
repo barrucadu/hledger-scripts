@@ -1,0 +1,11 @@
+resolver: lts-11.10
+
+packages:
+- .
+
+extra-deps:
+- ../hledger-lib-extras
+
+nix:
+  packages:
+  - zlib

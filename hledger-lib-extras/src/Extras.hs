@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Extras where
 
 import           Control.Arrow      (second)
@@ -5,6 +7,7 @@ import           Data.Decimal       (Decimal)
 import           Data.List          (inits, sortOn)
 import qualified Data.Map           as M
 import           Data.Semigroup     ((<>))
+import qualified Data.Text          as T
 import           Data.Time.Calendar (Day)
 import           Hledger.Data.Types as H
 
@@ -70,6 +73,34 @@ findFactors
   -> G.Graph H.CommoditySymbol Decimal
   -> [(H.CommoditySymbol, Decimal)]
 findFactors c = M.assocs . M.findWithDefault (M.singleton c 1) c
+
+-------------------------------------------------------------------------------
+-- * Subaccounts
+
+-- | Check if an account is an asset account.
+isAsset :: H.AccountName -> Bool
+isAsset = isSubAccount "assets"
+
+-- | Check if an account is an equity account.
+isEquity :: H.AccountName -> Bool
+isEquity = isSubAccount "equity"
+
+-- | Check if an account is an expense account.
+isExpense :: H.AccountName -> Bool
+isExpense = isSubAccount "expenses"
+
+-- | Check if an account is an income account.
+isIncome :: H.AccountName -> Bool
+isIncome = isSubAccount "income"
+
+-- | Check if an account is an liability account.
+isLiability :: H.AccountName -> Bool
+isLiability = isSubAccount "liabilities"
+
+-- | Check if an account is a subaccount of another (every account is
+-- a subaccount of itself).
+isSubAccount :: H.AccountName -> H.AccountName -> Bool
+isSubAccount super other = super == other || T.isPrefixOf (super <> ":") other
 
 -------------------------------------------------------------------------------
 -- * Miscellaneous
