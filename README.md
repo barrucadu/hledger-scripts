@@ -153,8 +153,35 @@ So there is no danger (in terms of producing an invalid journal) in
 having a cronjob to run this script and append the results to a file;
 you'll just need to manually fix any errors.
 
+
+aggregate-fundingcircle
+-----------------------
+
+Aggregates interest payments and fees from a [Funding Circle][]
+statement into totals.  Downloads market values of commodities from a
+few different sources.
+
+**Dependencies:** none.
+
+**Usage:**
+
+```bash
+$ ./aggregate-fundingcircle.sh path/to/statement.csv
+```
+
+**Output:**
+
+```
+interest: 832
+fees:     78
+```
+
+The aggregates are in pence.
+
+
 [hledger]: http://hledger.org/
 [grafana]: https://grafana.com/
 [stack]: https://docs.haskellstack.org/en/stable/README/
 [influxdb]: https://www.influxdata.com/
 [python]: https://www.python.org/
+[Funding Circle]: https://www.fundingcircle.com/uk/
