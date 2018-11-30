@@ -4,6 +4,7 @@ module Main where
 
 import           Control.Arrow      ((***))
 import           Data.Decimal       (Decimal)
+import           Data.Foldable      (for_)
 import           Data.Function      (on)
 import           Data.List          (groupBy, mapAccumL, nub)
 import qualified Data.Map           as M
@@ -23,19 +24,23 @@ main :: IO ()
 main = do
   journal <- H.defaultJournal
   let measurements = toMeasurements (H.jmarketprices journal) (H.jtxns journal)
-  I.writeBatch (I.writeParams "finance") measurements
-  putStrLn $ "Wrote " ++ show (length measurements) ++ " measurements."
+  for_ measurements $ \(name, ms) -> do
+    putStrLn ("Writing " <> T.unpack name <> " (" <> show (length ms) <> " measurements)")
+    for_ (chunksOf 300 ms) (I.writeBatch (I.writeParams "finance"))
+  putStrLn "Done"
 
-toMeasurements :: [H.MarketPrice] -> [H.Transaction] -> [I.Line UTCTime]
+toMeasurements
+  :: [H.MarketPrice] -> [H.Transaction] -> [(T.Text, [I.Line UTCTime])]
 toMeasurements prices txns =
-  measurements nvalue "normal_txns" txns
-    ++ measurements nvalue        "normal_dailies" dailies
-    ++ measurements cvalue        "cost_txns"      txns
-    ++ measurements cvalue        "cost_dailies"   dailies
-    ++ measurements mvalue        "market_txns"    txns
-    ++ measurements mvalue        "market_dailies" dailies
-    ++ measurements countToInflux "count"          txns
-    ++ measurements priceToInflux "market"         prices
+  [ measurements nvalue        "normal_txns"    txns
+  , measurements nvalue        "normal_dailies" dailies
+  , measurements cvalue        "cost_txns"      txns
+  , measurements cvalue        "cost_dailies"   dailies
+  , measurements mvalue        "market_txns"    txns
+  , measurements mvalue        "market_dailies" dailies
+  , measurements countToInflux "count"          txns
+  , measurements priceToInflux "market"         prices
+  ]
  where
   nvalue = balancesToInflux (const E.normalValue)
   cvalue = balancesToInflux (const E.costValue)
@@ -49,12 +54,15 @@ toMeasurements prices txns =
                            }
   squish _ = Nothing
 
-  measurements toL name =
-    concat
+  measurements toL name xs =
+    ( name
+    , concat
       . snd
       . mapAccumL
           (toL (fromText (name <> "_total")) (fromText (name <> "_delta")))
           M.empty
+      $ xs
+    )
 
   balancesToInflux = toInflux accountKey (\_ ac q -> [(ac, q)]) . toDeltas
   countToInflux    = toInflux fromText (\_ ac q -> [(ac, q)]) $ \txn ->
@@ -143,3 +151,7 @@ accountKey (a, c) = fromText $ a <> "[" <> c <> "]"
 
 priceKey :: (H.CommoditySymbol, H.CommoditySymbol) -> I.Key
 priceKey (c, c') = fromText $ c <> "[" <> c' <> "]"
+
+chunksOf :: Int -> [a] -> [[a]]
+chunksOf _ [] = []
+chunksOf n xs = take n xs : chunksOf n (drop n xs)
