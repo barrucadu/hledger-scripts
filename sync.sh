@@ -8,11 +8,19 @@ fi
 LEDGER_DIR=`dirname $LEDGER_FILE`
 
 # fetch commodity prices
-PRICE_DB="${LEDGER_DIR}/prices"
-echo >> $PRICE_DB
-./market-prices/market-prices.py < market-prices/commodities.json >> $PRICE_DB
+if [[ "$1" == "" ]] || [[ "$1" == "only-prices" ]]; then
+  PRICE_DB="${LEDGER_DIR}/prices"
+  echo >> $PRICE_DB
+  ./market-prices/market-prices.py < market-prices/commodities.json >> $PRICE_DB
+else
+  echo "skipping prices"
+fi
 
 # sync data to influxdb
-INFLUX_DB="finance"
-echo "drop database ${INFLUX_DB}; create database ${INFLUX_DB};" | influx
-./hledger-to-influxdb/.stack-work/dist/x86_64-linux-nix/Cabal-2.0.1.0/build/hledger-to-influxdb/hledger-to-influxdb
+if [[ "$1" == "" ]] || [[ "$1" == "only-influxdb" ]]; then
+  INFLUX_DB="finance"
+  echo "drop database ${INFLUX_DB}; create database ${INFLUX_DB};" | influx
+  ./hledger-to-influxdb/.stack-work/dist/x86_64-linux-nix/Cabal-2.0.1.0/build/hledger-to-influxdb/hledger-to-influxdb
+else
+  echo "skipping influxdb"
+fi
