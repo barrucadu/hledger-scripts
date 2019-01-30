@@ -55,14 +55,12 @@ toMeasurements prices txns =
   squish _ = Nothing
 
   measurements toL name xs =
-    ( name
-    , concat
-      . snd
-      . mapAccumL
+    let go start = mapAccumL
           (toL (fromText (name <> "_total")) (fromText (name <> "_delta")))
-          M.empty
-      $ xs
-    )
+          start
+          xs
+        initialAccounts = M.map (const 0) (fst (go M.empty))
+    in  (name, concat (snd (go initialAccounts)))
 
   balancesToInflux = toInflux accountKey (\_ ac q -> [(ac, q)]) . toDeltas
   countToInflux    = toInflux fromText (\_ ac q -> [(ac, q)]) $ \txn ->
