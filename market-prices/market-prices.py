@@ -31,14 +31,17 @@ def ft_find_price(url, currency):
                 self.isnext = False
 
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req) as response:
-        html = response.read().decode('utf-8')
-        finder = FTPriceFinder()
-        finder.feed(html)
-        if finder.found is None:
-            raise Exception("could not find price")
-        else:
-            return finder.found
+    try:
+        with urllib.request.urlopen(req) as response:
+            html = response.read().decode('utf-8')
+            finder = FTPriceFinder()
+            finder.feed(html)
+            if finder.found is None:
+                raise Exception("could not find price in {}".format(currency))
+            else:
+                return finder.found
+    except Exception as e:
+        raise Exception("{} on URL {}".format(e, url))
 
 
 def get_ft_currency(base, currency):
