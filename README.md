@@ -96,7 +96,8 @@ Here is an example showing off all of the options:
   , "LTC":   { "provider": "coinbase" }
   , "Euro":  { "provider": "ft_currency", "base": "EUR" }
   , "JPY":   { "provider": "ft_currency" }
-  , "VADEA": { "provider": "ft_fund", "isin": "GB00B41XG308" }
+  , "VADEA": { "provider": "ft_fund", "symbol": "GB00B41XG308:GBP" }
+  , "TDIFX": { "provider": "ft_fund", "currency": "USD" }
   }
 , "symbols":
   { "GBP": "£"
@@ -118,7 +119,7 @@ There are three providers:
   - `currency`, the currency to get the exchange rate in (defaults to
     "GBP")
 - `ft_fund`, fund NAV from Financial Times.  Arguments are:
-  - `isin`, the ISIN of the fund (defaults to the commodity name)
+  - `symbol`, the full ticker symbol (defaults to the commodity name)
   - `currency`, the currency to get the NAV in (defaults to "GBP")
 
 **Output:**

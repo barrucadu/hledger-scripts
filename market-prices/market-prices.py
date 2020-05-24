@@ -50,9 +50,9 @@ def get_ft_currency(base, currency):
         currency)
 
 
-def get_ft_fund(isin, currency):
+def get_ft_fund(symbol, currency):
     return ft_find_price(
-        "https://markets.ft.com/data/funds/tearsheet/summary?s={}:{}".format(isin, currency),
+        "https://markets.ft.com/data/funds/tearsheet/summary?s={}".format(symbol),
         currency)
 
 
@@ -76,8 +76,14 @@ for commodity, cconfig in config.get('commodities', {}).items():
                 cconfig.get('base', commodity),
                 currency)
         elif provider == 'ft_fund':
+            # backwards compatiblity
+            isin = cconfig.get('isin')
+            if isin:
+                symbol = "{}:{}".format(isin, currency)
+            else:
+                symbol = cconfig.get('symbol', commodity)
             rate = get_ft_fund(
-                cconfig.get('isin', commodity),
+                symbol,
                 currency)
         else:
             raise Exception("unknown provider '{}'".format(provider))
