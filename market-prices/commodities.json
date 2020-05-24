@@ -8,6 +8,9 @@
   , "VANEA_by_isin": { "provider": "ft_fund", "isin": "GB00B41XG308" }
   , "VANEA":         { "provider": "ft_fund", "symbol": "GB00B41XG308:GBP" }
   , "TDIFX":         { "provider": "ft_fund", "currency": "USD" }
+  , "EUNL":          { "provider": "ft_etf",    "symbol": "EUNL:FRA:EUR",  "currency": "EUR" }
+  , "GOOG":          { "provider": "ft_equity", "symbol": "GOOG:NSQ",      "currency": "USD" }
+  , "MSCIW":         { "provider": "ft_index",  "symbol": "MS-WX:MSI",     "currency": "USD" }
   }
 , "symbols": { "GBP": "£" }
 }

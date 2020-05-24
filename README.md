@@ -98,6 +98,9 @@ Here is an example showing off all of the options:
   , "JPY":   { "provider": "ft_currency" }
   , "VADEA": { "provider": "ft_fund", "symbol": "GB00B41XG308:GBP" }
   , "TDIFX": { "provider": "ft_fund", "currency": "USD" }
+  , "EUNL":  { "provider": "ft_etf",    "symbol": "EUNL:FRA:EUR",  "currency": "EUR" }
+  , "GOOG":  { "provider": "ft_equity", "symbol": "GOOG:NSQ",      "currency": "USD" }
+  , "MSCIW": { "provider": "ft_index",  "symbol": "MS-WX:MSI",     "currency": "USD" }
   }
 , "symbols":
   { "GBP": "£"
@@ -106,7 +109,7 @@ Here is an example showing off all of the options:
 }
 ```
 
-There are three providers:
+There are the following providers:
 
 - `coinbase`, spot price from coinbase.  Arguments are:
   - `base`, the name of the cryptocoin (defaults to the commodity
@@ -121,6 +124,9 @@ There are three providers:
 - `ft_fund`, fund NAV from Financial Times.  Arguments are:
   - `symbol`, the full ticker symbol (defaults to the commodity name)
   - `currency`, the currency to get the NAV in (defaults to "GBP")
+- `ft_etf`, ETF NAV from Financial Times. Same arguments as `ft_fund`.
+- `ft_equity`, stock price from Financial Times. Same arguments as `ft_fund`.
+- `ft_index`, index value from Financial Times. Same arguments as `ft_fund`.
 
 **Output:**
 

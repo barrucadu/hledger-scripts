@@ -50,10 +50,18 @@ def get_ft_currency(base, currency):
         currency)
 
 
-def get_ft_fund(symbol, currency):
+def get_ft_security(stype, symbol, currency):
     return ft_find_price(
-        "https://markets.ft.com/data/funds/tearsheet/summary?s={}".format(symbol),
+        "https://markets.ft.com/data/{}/tearsheet/summary?s={}".format(stype, symbol),
         currency)
+
+
+ft_security_types = {
+        "ft_equity": "equities",
+        "ft_etf": "etfs",
+        "ft_fund": "funds",
+        "ft_index": "indices",
+    }
 
 
 config = json.load(sys.stdin)
@@ -75,14 +83,15 @@ for commodity, cconfig in config.get('commodities', {}).items():
             rate = get_ft_currency(
                 cconfig.get('base', commodity),
                 currency)
-        elif provider == 'ft_fund':
+        elif provider in ft_security_types.keys():
             # backwards compatiblity
             isin = cconfig.get('isin')
-            if isin:
+            if provider == 'ft_fund' and isin:
                 symbol = "{}:{}".format(isin, currency)
             else:
                 symbol = cconfig.get('symbol', commodity)
-            rate = get_ft_fund(
+            rate = get_ft_security(
+                ft_security_types[provider],
                 symbol,
                 currency)
         else:
