@@ -13,4 +13,7 @@
   , "MSCIW":         { "provider": "ft_index",  "symbol": "MS-WX:MSI",     "currency": "USD" }
   }
 , "symbols": { "GBP": "£" }
+, "settings":
+  {  "default_currency": "GBP"
+  }
 }

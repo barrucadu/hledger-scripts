@@ -66,6 +66,9 @@ ft_security_types = {
 
 config = json.load(sys.stdin)
 symbols = config.get('symbols', {})
+settings = config.get('settings', {})
+settings.setdefault('default_currency', 'GBP')
+
 for commodity, cconfig in config.get('commodities', {}).items():
     try:
         try:
@@ -73,7 +76,7 @@ for commodity, cconfig in config.get('commodities', {}).items():
         except KeyError:
             raise Exception("missing provider")
 
-        currency = cconfig.get('currency', 'GBP')
+        currency = cconfig.get('currency', settings['default_currency'])
 
         if provider == 'coinbase':
             rate = get_coinbase(

@@ -106,8 +106,16 @@ Here is an example showing off all of the options:
   { "GBP": "£"
   , "USD": "$"
   }
+, "settings":
+  { "default_currency": "GBP"
+  }
 }
 ```
+
+Settings can be specified in the optional `settings` object:
+
+- `default_currency`: default currency for all providers if none is specified
+   (default: "GBP")
 
 There are the following providers:
 
@@ -123,7 +131,7 @@ There are the following providers:
     "GBP")
 - `ft_fund`, fund NAV from Financial Times.  Arguments are:
   - `symbol`, the full ticker symbol (defaults to the commodity name)
-  - `currency`, the currency to get the NAV in (defaults to "GBP")
+  - `currency`, the currency to get the NAV in (defaults to the default currency)
 - `ft_etf`, ETF NAV from Financial Times. Same arguments as `ft_fund`.
 - `ft_equity`, stock price from Financial Times. Same arguments as `ft_fund`.
 - `ft_index`, index value from Financial Times. Same arguments as `ft_fund`.
