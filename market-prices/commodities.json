@@ -6,6 +6,7 @@
   , "JPY":   { "provider": "ft_currency" }
   , "USD":   { "provider": "ft_currency" }
   , "VANEA": { "provider": "ft_fund", "isin": "GB00B41XG308" }
+  , "OIBR3": { "provider": "ft_equity", "isin": "OIBR3:SAO", "currency": "BRL" }
   }
 , "symbols": { "GBP": "£" }
 }
