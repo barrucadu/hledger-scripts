@@ -17,15 +17,11 @@ Copies your hledger data to an [influxdb][] database called "finance".
 **Usage:**
 
 ```bash
-$ cd hledger-to-influxdb
-
 $ influx
 > drop database finance;
 > create database finance;
 
-$ stack build
-
-$ stack exec hledger-to-influxdb
+$ ./hledger-to-influxdb.hs
 ```
 
 Emptying, or recreating, the "finance" database is necessary, as this

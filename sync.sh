@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#!/usr/bin/env nix-shell
+#! nix-shell -i bash -p haskellPackages.stack influxdb
 
 if [[ -z "$LEDGER_FILE" ]]; then
   echo "expected LEDGER_FILE to be set" >&2
@@ -20,7 +21,7 @@ fi
 if [[ "$1" == "" ]] || [[ "$1" == "only-influxdb" ]]; then
   INFLUX_DB="finance"
   echo "drop database ${INFLUX_DB}; create database ${INFLUX_DB};" | influx
-  ./hledger-to-influxdb/.stack-work/dist/x86_64-linux-nix/Cabal-2.0.1.0/build/hledger-to-influxdb/hledger-to-influxdb
+  ./hledger-to-influxdb.hs
 else
   echo "skipping influxdb"
 fi
