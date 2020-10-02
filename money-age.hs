@@ -1,7 +1,7 @@
 #!/usr/bin/env stack
 {- stack script
   --nix --no-nix-pure
-  --resolver lts-14.7
+  --resolver lts-16.16
   --package boxes,containers,Decimal,hledger-lib,text,time
 -}
 
