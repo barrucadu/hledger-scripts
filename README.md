@@ -40,7 +40,7 @@ are:
 - `market`, which is the value (market basis) of each account at the end of every day
 - `period`, which is the end-of-month total income and expenses (market basis)
 - `count`, which is the total number of transactions
-- `market`, which is the market value of each commodity
+- `commodities`, which is the market value of each commodity
 
 Inside these measurements are values for accounts and currencies.
 It's probably easiest to explore these through a tool

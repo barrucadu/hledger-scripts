@@ -43,7 +43,7 @@ toMeasurements prices txns =
   , measurements mvalue "market" dailies
   , measurements (periodToInflux marketValues) "period" periods
   , measurements countToInflux "count"  txns
-  , measurements priceToInflux "market" prices
+  , measurements priceToInflux "commodities" prices
   ]
  where
   marketValues = marketValue (buildPrices prices)
@@ -109,7 +109,7 @@ priceToInflux
      , I.Line UTCTime
      )
 priceToInflux _ state (H.PriceDirective day c (H.Amount c' q' _ _ _)) =
-  (state', Line "market" M.empty fields (Just (UTCTime day 0)))
+  (state', Line "commodities" M.empty fields (Just (UTCTime day 0)))
  where
   fields   = toFields state'
   state'   = M.insert (c, c') q' state
