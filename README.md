@@ -42,6 +42,9 @@ are:
 - `count`, which is the total number of transactions
 - `commodities`, which is the market value of each commodity
 
+There is one `normal`, `cost`, and `market` measurement for each day
+from the 1st of January to the final transaction in the journal.
+
 Inside these measurements are values for accounts and currencies.
 It's probably easiest to explore these through a tool
 like [grafana][].

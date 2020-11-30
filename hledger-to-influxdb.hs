@@ -20,7 +20,7 @@ import qualified Data.Map           as M
 import           Data.Maybe         (mapMaybe)
 import           Data.String        (IsString, fromString)
 import qualified Data.Text          as T
-import           Data.Time.Calendar (Day, toGregorian, fromGregorian, gregorianMonthLength)
+import           Data.Time.Calendar (Day, addDays, toGregorian, fromGregorian, gregorianMonthLength)
 import           Data.Time.Clock    (UTCTime (..))
 import           Database.InfluxDB  as I
 import           Hledger.Data.Types as H
@@ -54,11 +54,14 @@ toMeasurements prices txns =
                     marketValues
                     (toDeltas (const normalValue))
 
-  dailies = mapMaybe squish $ groupBy ((==) `on` H.tdate) txns
+  dailies = mapMaybe squish . groupBy ((==) `on` H.tdate) . sortOn H.tdate $ sortedTxns ++ emptyTransactionsUpTo today
   squish ts@(t:_) = Just t { H.tdescription = "aggregate"
                            , H.tpostings    = concatMap H.tpostings ts
                            }
   squish _ = Nothing
+
+  today = H.tdate (last sortedTxns)
+  sortedTxns = sortOn H.tdate txns
 
   periods = groupBy ((==) `on` (periodOf . H.tdate)) txns
 
@@ -276,6 +279,16 @@ periodOf :: Day -> Day
 periodOf day =
   let (y, m, _) = toGregorian day
   in fromGregorian y m (gregorianMonthLength y m)
+
+-- | Empty transactions from YYYY-01-01 up to the given day
+emptyTransactionsUpTo :: Day -> [H.Transaction]
+emptyTransactionsUpTo end = go start
+ where
+   year = (\(y,_,_) -> y) (toGregorian end)
+   start = fromGregorian year 1 1
+
+   go d = txn d : if d < end then go (addDays 1 d) else []
+   txn d = H.Transaction 0 "" (H.GenericSourcePos "" 0 0) d Nothing H.Unmarked "" "" "" [] []
 
 -------------------------------------------------------------------------------
 -- * Graph utilities
