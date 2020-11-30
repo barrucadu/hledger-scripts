@@ -20,7 +20,7 @@ import qualified Data.Map           as M
 import           Data.Maybe         (mapMaybe)
 import           Data.String        (IsString, fromString)
 import qualified Data.Text          as T
-import           Data.Time.Calendar (Day, addDays, toGregorian, fromGregorian, gregorianMonthLength)
+import           Data.Time.Calendar (Day, addDays, toGregorian, fromGregorian)
 import           Data.Time.Clock    (UTCTime (..))
 import           Database.InfluxDB  as I
 import           Hledger.Data.Types as H
@@ -278,7 +278,7 @@ chunksOf n xs = take n xs : chunksOf n (drop n xs)
 periodOf :: Day -> Day
 periodOf day =
   let (y, m, _) = toGregorian day
-  in fromGregorian y m (gregorianMonthLength y m)
+  in fromGregorian y m 15
 
 -- | Empty transactions from YYYY-01-01 up to the given day
 emptyTransactionsUpTo :: Day -> [H.Transaction]
