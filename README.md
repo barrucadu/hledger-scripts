@@ -35,19 +35,10 @@ use a different one, set the `LEDGER_FILE` environment variable.
 This gives you a collection of measurements in your database.  These
 are:
 
-- `$value_$aggregate_$type`, where
-  - `$value` is the valuation method used:
-    - `normal`, where the literal value is used
-    - `cost`, where the cost value is used
-    - `market`, where the market value is used
-  - `$aggregate` is how the transactions are turned into measurements:
-    - `txns`, means each transaction gets one measurement
-    - `dailies`, means each day gets one measurement
-  - `$type` is what is reported:
-    - `total`, means the total value of accounts is reported
-    - `delta`, means the difference in value of accounts is reported
-- `count_total`, which is the total number of transactions
-- `count_delta`, which is `1` for each transaction
+- `normal`, which is the value of each account at the end of every day
+- `cost`, which is the value (cost basis) of each account at the end of every day
+- `market`, which is the value (market basis) of each account at the end of every day
+- `count`, which is the total number of transactions
 - `market`, which is the market value of each commodity
 
 Inside these measurements are values for accounts and currencies.

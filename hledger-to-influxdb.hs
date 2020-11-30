@@ -9,7 +9,7 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Main where
+module Main (main) where
 
 import           Control.Arrow      ((***), second)
 import           Data.Decimal       (Decimal)
@@ -38,14 +38,11 @@ main = do
 toMeasurements
   :: [H.PriceDirective] -> [H.Transaction] -> [(T.Text, [I.Line UTCTime])]
 toMeasurements prices txns =
-  [ measurements nvalue        "normal_txns"    txns
-  , measurements nvalue        "normal_dailies" dailies
-  , measurements cvalue        "cost_txns"      txns
-  , measurements cvalue        "cost_dailies"   dailies
-  , measurements mvalue        "market_txns"    txns
-  , measurements mvalue        "market_dailies" dailies
-  , measurements countToInflux "count"          txns
-  , measurements priceToInflux "market"         prices
+  [ measurements nvalue        "normal" dailies
+  , measurements cvalue        "cost"   dailies
+  , measurements mvalue        "market" dailies
+  , measurements countToInflux "count"  txns
+  , measurements priceToInflux "market" prices
   ]
  where
   nvalue = balancesToInflux (const normalValue)
@@ -62,11 +59,11 @@ toMeasurements prices txns =
 
   measurements toL name xs =
     let go start = mapAccumL
-          (toL (fromText (name <> "_total")) (fromText (name <> "_delta")))
+          (toL (fromText name))
           start
           xs
         initialAccounts = M.map (const 0) (fst (go M.empty))
-    in  (name, concat (snd (go initialAccounts)))
+    in  (name, snd (go initialAccounts))
 
   balancesToInflux = toInflux accountKey (\_ ac q -> [(ac, q)]) . toDeltas
   countToInflux    = toInflux fromText (\_ ac q -> [(ac, q)]) $ \txn ->
@@ -80,27 +77,14 @@ toInflux
   -> (Day -> k -> Decimal -> [(k, Decimal)])
   -> (H.Transaction -> [(k, Decimal)])
   -> I.Measurement
-  -> I.Measurement
   -> M.Map k Decimal
   -> H.Transaction
-  -> (M.Map k Decimal, [I.Line UTCTime])
-toInflux toKey transform deltaf keyT keyD state txn =
-  (state', map toLine [(keyT, fieldsT), (keyD, fieldsD)])
+  -> (M.Map k Decimal, I.Line UTCTime)
+toInflux toKey transform deltaf key state txn =
+  (state', Line key M.empty fields (Just time))
  where
-  toLine (key, fields) = Line key tags fields (Just time)
   time = UTCTime (H.tdate txn) 0
-  tags =
-    M.fromList
-      .  map (fromText *** fromText)
-      .  filter (not . T.null . snd)
-      $  [ ("code"       , H.tcode txn)
-         , ("description", H.tdescription txn)
-         , ("status"     , showStatus (H.tstatus txn))
-         ]
-      ++ H.ttags txn
-
-  fieldsT = toFields state'
-  fieldsD = toFields deltas
+  fields = toFields state'
 
   state'  = M.unionWith (+) state deltas
   deltas  = M.fromList (deltaf txn)
@@ -114,14 +98,13 @@ toInflux toKey transform deltaf keyT keyD state txn =
 
 priceToInflux
   :: a
-  -> b
   -> M.Map (H.CommoditySymbol, H.CommoditySymbol) Decimal
   -> H.PriceDirective
   -> ( M.Map (H.CommoditySymbol, H.CommoditySymbol) Decimal
-     , [I.Line UTCTime]
+     , I.Line UTCTime
      )
-priceToInflux _ _ state (H.PriceDirective day c (H.Amount c' q' _ _ _)) =
-  (state', [Line "market" M.empty fields (Just (UTCTime day 0))])
+priceToInflux _ state (H.PriceDirective day c (H.Amount c' q' _ _ _)) =
+  (state', Line "market" M.empty fields (Just (UTCTime day 0)))
  where
   fields   = toFields state'
   state'   = M.insert (c, c') q' state
