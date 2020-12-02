@@ -63,7 +63,7 @@ toMeasurements prices txns =
   today = H.tdate (last sortedTxns)
   sortedTxns = sortOn H.tdate txns
 
-  periods = groupBy ((==) `on` (periodOf . H.tdate)) txns
+  periods = init $ groupBy ((==) `on` (periodOf . H.tdate)) txns
 
   measurements toL name xs =
     let go start = mapAccumL
