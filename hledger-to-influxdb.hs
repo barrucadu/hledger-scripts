@@ -54,12 +54,13 @@ toMeasurements prices txns =
                     marketValues
                     (toDeltas (const normalValue))
 
-  dailies = mapMaybe squish . groupBy ((==) `on` H.tdate) . sortOn H.tdate $ sortedTxns ++ emptyTransactionsUpTo today
+  dailies = mapMaybe squish . groupBy ((==) `on` H.tdate) . sortOn H.tdate $ sortedTxns ++ emptyTransactionsFromTo epoch today
   squish ts@(t:_) = Just t { H.tdescription = "aggregate"
                            , H.tpostings    = concatMap H.tpostings ts
                            }
   squish _ = Nothing
 
+  epoch = H.tdate (head sortedTxns)
   today = H.tdate (last sortedTxns)
   sortedTxns = sortOn H.tdate txns
 
@@ -281,10 +282,10 @@ periodOf day =
   in fromGregorian y m 15
 
 -- | Empty transactions from YYYY-01-01 up to the given day
-emptyTransactionsUpTo :: Day -> [H.Transaction]
-emptyTransactionsUpTo end = go start
+emptyTransactionsFromTo :: Day -> Day -> [H.Transaction]
+emptyTransactionsFromTo start0 end = go start
  where
-   year = (\(y,_,_) -> y) (toGregorian end)
+   year = (\(y,_,_) -> y) (toGregorian start0)
    start = fromGregorian year 1 1
 
    go d = txn d : if d < end then go (addDays 1 d) else []
