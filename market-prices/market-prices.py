@@ -52,6 +52,11 @@ def get_ft_fund(isin, currency):
         "https://markets.ft.com/data/funds/tearsheet/summary?s={}:{}".format(isin, currency),
         currency)
 
+def get_ft_equity(isin, currency):
+    return ft_find_price(
+        "https://markets.ft.com/data/equities/tearsheet/summary?s={}".format(isin),
+        currency)
+
 
 config = json.load(sys.stdin)
 symbols = config.get('symbols', {})
@@ -74,6 +79,10 @@ for commodity, cconfig in config.get('commodities', {}).items():
                 currency)
         elif provider == 'ft_fund':
             rate = get_ft_fund(
+                cconfig.get('isin', commodity),
+                currency)
+        elif provider == 'ft_equity':
+            rate = get_ft_equity(
                 cconfig.get('isin', commodity),
                 currency)
         else:
