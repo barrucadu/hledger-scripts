@@ -31,14 +31,17 @@ def ft_find_price(url, currency):
                 self.isnext = False
 
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req) as response:
-        html = response.read().decode('utf-8')
-        finder = FTPriceFinder()
-        finder.feed(html)
-        if finder.found is None:
-            raise Exception("could not find price")
-        else:
-            return finder.found
+    try:
+        with urllib.request.urlopen(req) as response:
+            html = response.read().decode('utf-8')
+            finder = FTPriceFinder()
+            finder.feed(html)
+            if finder.found is None:
+                raise Exception("could not find price in {}".format(currency))
+            else:
+                return finder.found
+    except Exception as e:
+        raise Exception("{} on URL {}".format(e, url))
 
 
 def get_ft_currency(base, currency):
@@ -47,14 +50,25 @@ def get_ft_currency(base, currency):
         currency)
 
 
-def get_ft_fund(isin, currency):
+def get_ft_security(stype, symbol, currency):
     return ft_find_price(
-        "https://markets.ft.com/data/funds/tearsheet/summary?s={}:{}".format(isin, currency),
+        "https://markets.ft.com/data/{}/tearsheet/summary?s={}".format(stype, symbol),
         currency)
+
+
+ft_security_types = {
+        "ft_equity": "equities",
+        "ft_etf": "etfs",
+        "ft_fund": "funds",
+        "ft_index": "indices",
+    }
 
 
 config = json.load(sys.stdin)
 symbols = config.get('symbols', {})
+settings = config.get('settings', {})
+settings.setdefault('default_currency', 'GBP')
+
 for commodity, cconfig in config.get('commodities', {}).items():
     try:
         try:
@@ -62,7 +76,7 @@ for commodity, cconfig in config.get('commodities', {}).items():
         except KeyError:
             raise Exception("missing provider")
 
-        currency = cconfig.get('currency', 'GBP')
+        currency = cconfig.get('currency', settings['default_currency'])
 
         if provider == 'coinbase':
             rate = get_coinbase(
@@ -72,9 +86,16 @@ for commodity, cconfig in config.get('commodities', {}).items():
             rate = get_ft_currency(
                 cconfig.get('base', commodity),
                 currency)
-        elif provider == 'ft_fund':
-            rate = get_ft_fund(
-                cconfig.get('isin', commodity),
+        elif provider in ft_security_types.keys():
+            # backwards compatiblity
+            isin = cconfig.get('isin')
+            if provider == 'ft_fund' and isin:
+                symbol = "{}:{}".format(isin, currency)
+            else:
+                symbol = cconfig.get('symbol', commodity)
+            rate = get_ft_security(
+                ft_security_types[provider],
+                symbol,
                 currency)
         else:
             raise Exception("unknown provider '{}'".format(provider))
