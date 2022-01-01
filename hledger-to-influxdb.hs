@@ -56,11 +56,9 @@ toMeasurements prices txns =
  where
   marketValues = marketValue (buildPrices prices)
 
-  nvalue = balancesToInflux (const normalValue)
-  cvalue = balancesToInflux (const costValue)
-  mvalue = toInflux accountKey
-                    marketValues
-                    (toDeltas (const normalValue))
+  nvalue = balancesToInflux normalValue
+  cvalue = balancesToInflux costValue
+  mvalue = toInflux accountKey marketValues (toValueDeltas normalValue)
 
   dailies = mapMaybe squish . groupBy ((==) `on` H.tdate) . sortOn H.tdate $ sortedTxns ++ emptyTransactionsFromTo epoch today
   squish ts@(t:_) = Just t { H.tdescription = "aggregate"
@@ -82,7 +80,7 @@ toMeasurements prices txns =
         initialAccounts = M.map (const 0) (fst (go M.empty))
     in  (name, snd (go initialAccounts))
 
-  balancesToInflux = toInflux accountKey (\_ ac q -> [(ac, q)]) . toDeltas
+  balancesToInflux = toInflux accountKey (\_ ac q -> [(ac, q)]) . toValueDeltas
   countToInflux    = toInflux fromText (\_ ac q -> [(ac, q)]) $ \txn ->
     [ (showStatus status, if H.tstatus txn == status then 1 else 0)
     | status <- [minBound .. maxBound]
@@ -148,7 +146,7 @@ periodToInflux marketValues _ s txns@(t:_) =
    toPeriodDelta :: M.Map (H.AccountName, H.CommoditySymbol) Decimal -> H.Transaction -> M.Map (H.AccountName, H.CommoditySymbol) Decimal
    toPeriodDelta acc txn =
      let deltas :: [((AccountName, CommoditySymbol), Decimal)]
-         deltas = concatMap (\(ac,q) -> marketValues (H.tdate txn) ac q) (toDeltas (const normalValue) txn)
+         deltas = concatMap (\(ac,q) -> marketValues (H.tdate txn) ac q) (toValueDeltas normalValue txn)
          incomeDeltas = deltasFor "income" deltas
          allAssetsDeltas = deltasFor "assets" deltas
          allExpensesDeltas = deltasFor "expenses" deltas
@@ -162,17 +160,17 @@ periodToInflux marketValues _ s txns@(t:_) =
    deltasFor a0 = filter $ \((a,_),_) -> a == a0
 periodToInflux _ _ _ [] = error "empty period"
 
-toDeltas
-  :: (Day -> H.MixedAmount -> [(H.CommoditySymbol, Decimal)])
+toValueDeltas
+  :: (H.MixedAmount -> [(H.CommoditySymbol, Decimal)])
   -> H.Transaction
   -> [((H.AccountName, H.CommoditySymbol), Decimal)]
-toDeltas value txn =
+toValueDeltas getValue txn =
   let postings = concatMap explodeAccount (H.tpostings txn)
       accounts = nub (map H.paccount postings)
   in  [ ((a, cur), val)
       | a <- accounts
       , let ps = filter ((== a) . H.paccount) postings
-      , (cur, val) <- sumSame (concatMap (value (tdate txn) . H.pamount) ps)
+      , (cur, val) <- sumSame (concatMap (getValue . H.pamount) ps)
       ]
 
 showStatus :: H.Status -> T.Text
