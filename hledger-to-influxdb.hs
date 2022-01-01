@@ -15,9 +15,9 @@ import           Control.Arrow      ((***), second)
 import           Data.Decimal       (Decimal)
 import           Data.Foldable      (for_)
 import           Data.Function      (on)
-import           Data.List          (foldl', groupBy, inits, mapAccumL, nub, sortOn)
+import           Data.List          (foldl', inits, mapAccumL, nub, sortOn)
+import           Data.List.NonEmpty (NonEmpty(..), groupBy)
 import qualified Data.Map           as M
-import           Data.Maybe         (mapMaybe)
 import           Data.String        (IsString, fromString)
 import qualified Data.Text          as T
 import           Data.Time.Calendar (Day, addDays, toGregorian, fromGregorian)
@@ -60,11 +60,10 @@ toMeasurements prices txns =
   cvalue = balancesToInflux costValue
   mvalue = toInflux accountKey marketValues (toValueDeltas normalValue)
 
-  dailies = mapMaybe squish . groupBy ((==) `on` H.tdate) . sortOn H.tdate $ sortedTxns ++ emptyTransactionsFromTo epoch today
-  squish ts@(t:_) = Just t { H.tdescription = "aggregate"
-                           , H.tpostings    = concatMap H.tpostings ts
-                           }
-  squish _ = Nothing
+  dailies =
+    let allTxns = sortOn H.tdate (sortedTxns ++ emptyTransactionsFromTo epoch today)
+        squish ts@(t:|_) = t { H.tpostings = concatMap H.tpostings ts }
+    in map squish (groupBy ((==) `on` H.tdate) allTxns)
 
   epoch = H.tdate (head sortedTxns)
   today = H.tdate (last sortedTxns)
@@ -132,15 +131,15 @@ periodToInflux
   :: (Day -> (AccountName, CommoditySymbol) -> Decimal -> [((AccountName, CommoditySymbol), Decimal)])
   -> a
   -> s
-  -> [H.Transaction]
+  -> NonEmpty H.Transaction
   -> ( s
      , I.Line UTCTime
      )
-periodToInflux marketValues _ s txns@(t:_) =
+periodToInflux marketValues _ s (t:|ts) =
   (s, Line "period" M.empty fields (Just time))
  where
    time = UTCTime (periodOf (H.tdate t)) 0
-   fields = toFields $ foldl' toPeriodDelta M.empty txns
+   fields = toFields $ foldl' toPeriodDelta M.empty (t:ts)
    toFields = M.fromList . map (accountKey *** (I.FieldFloat . doub)) . M.toList
 
    toPeriodDelta :: M.Map (H.AccountName, H.CommoditySymbol) Decimal -> H.Transaction -> M.Map (H.AccountName, H.CommoditySymbol) Decimal
@@ -158,7 +157,6 @@ periodToInflux marketValues _ s txns@(t:_) =
      in M.unionWith (+) acc . M.fromList $ assetsDeltas ++ expensesDeltas
 
    deltasFor a0 = filter $ \((a,_),_) -> a == a0
-periodToInflux _ _ _ [] = error "empty period"
 
 toValueDeltas
   :: (H.MixedAmount -> [(H.CommoditySymbol, Decimal)])
