@@ -34,7 +34,7 @@ main = do
 
 writeMeasurement :: T.Text -> [I.Line UTCTime] -> IO ()
 writeMeasurement name ms = do
-    putStrLn ("Writing " <> T.unpack name <> " (" <> show (length ms) <> " measurements)")
+    putStrLn (T.unpack name <> " (" <> show (length ms) <> " measurements)")
     for_ (zip [1..] chunks) $ \(i, chunk) -> do
       putStrLn ("  " <> show i <> " / " <> show numChunks)
       I.writeBatch (I.writeParams "finance") chunk
@@ -46,19 +46,19 @@ writeMeasurement name ms = do
 toMeasurements
   :: [H.PriceDirective] -> [H.Transaction] -> [(T.Text, [I.Line UTCTime])]
 toMeasurements prices txns =
-  [ measurements nvalue "normal" dailies
-  , measurements cvalue "cost"   dailies
-  , measurements mvalue "market" dailies
-  , measurements (periodToInflux marketValues) "period" periods
-  , measurements countToInflux "count"  txns
-  , measurements priceToInflux "commodities" prices
+  [ ("Normal-value daily aggregate transactions", measurements nvalue dailies)
+  , ("Cost-value daily aggregate transactions", measurements cvalue dailies)
+  , ("Market-value daily aggregate transactions", measurements mvalue dailies)
+  , ("Normal-value period aggregate transactions", measurements (periodToInflux marketValues) periods)
+  , ("Counts", measurements countToInflux txns)
+  , ("Commodities", measurements priceToInflux prices)
   ]
  where
   marketValues = marketValue (buildPrices prices)
 
-  nvalue = balancesToInflux normalValue
-  cvalue = balancesToInflux costValue
-  mvalue = toInflux accountKey marketValues (toValueDeltas normalValue)
+  nvalue = balancesToInflux normalValue "normal"
+  cvalue = balancesToInflux costValue "cost"
+  mvalue = toInflux accountKey marketValues (toValueDeltas normalValue) "market"
 
   dailies =
     let allTxns = sortOn H.tdate (sortedTxns ++ emptyTransactionsFromTo epoch today)
@@ -71,19 +71,21 @@ toMeasurements prices txns =
 
   periods = init $ groupBy ((==) `on` (periodOf . H.tdate)) txns
 
-  measurements toL name xs =
-    let go start = mapAccumL
-          (toL (fromText name))
-          start
-          xs
+  -- this isn't just `map` as it includes all accounts in all
+  -- measurements - even those from before the account existed (with a
+  -- value of 0)
+  measurements toL xs =
+    let go start = mapAccumL toL start xs
         initialAccounts = M.map (const 0) (fst (go M.empty))
-    in  (name, snd (go initialAccounts))
+    in snd (go initialAccounts)
 
   balancesToInflux = toInflux accountKey (\_ ac q -> [(ac, q)]) . toValueDeltas
-  countToInflux    = toInflux fromText (\_ ac q -> [(ac, q)]) $ \txn ->
-    [ (showStatus status, if H.tstatus txn == status then 1 else 0)
-    | status <- [minBound .. maxBound]
-    ]
+  countToInflux =
+    let toCount txn =
+          [ (showStatus status, if H.tstatus txn == status then 1 else 0)
+          | status <- [minBound .. maxBound]
+          ]
+    in toInflux fromText (\_ ac q -> [(ac, q)]) toCount "count"
 
 toInflux
   :: Ord k
@@ -111,13 +113,12 @@ toInflux toKey transform deltaf key state txn =
       . M.toList
 
 priceToInflux
-  :: a
-  -> M.Map (H.CommoditySymbol, H.CommoditySymbol) Decimal
+  :: M.Map (H.CommoditySymbol, H.CommoditySymbol) Decimal
   -> H.PriceDirective
   -> ( M.Map (H.CommoditySymbol, H.CommoditySymbol) Decimal
      , I.Line UTCTime
      )
-priceToInflux _ state (H.PriceDirective day c (H.Amount c' q' _ _ _)) =
+priceToInflux state (H.PriceDirective day c (H.Amount c' q' _ _ _)) =
   (state', Line "commodities" M.empty fields (Just (UTCTime day 0)))
  where
   fields   = toFields state'
@@ -129,14 +130,10 @@ priceToInflux _ state (H.PriceDirective day c (H.Amount c' q' _ _ _)) =
 -- purely transactions which touch `income:` and `expenses:`
 periodToInflux
   :: (Day -> (AccountName, CommoditySymbol) -> Decimal -> [((AccountName, CommoditySymbol), Decimal)])
-  -> a
   -> s
   -> NonEmpty H.Transaction
-  -> ( s
-     , I.Line UTCTime
-     )
-periodToInflux marketValues _ s (t:|ts) =
-  (s, Line "period" M.empty fields (Just time))
+  -> (s, I.Line UTCTime)
+periodToInflux marketValues s (t:|ts) = (s, Line "period" M.empty fields (Just time))
  where
    time = UTCTime (periodOf (H.tdate t)) 0
    fields = toFields $ foldl' toPeriodDelta M.empty (t:ts)
