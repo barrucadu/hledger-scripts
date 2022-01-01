@@ -28,12 +28,20 @@ import           Hledger.Read       as H
 
 main :: IO ()
 main = do
-  journal <- H.defaultJournal
-  let measurements = toMeasurements (H.jpricedirectives journal) (H.jtxns journal)
-  for_ measurements $ \(name, ms) -> do
+    journal <- H.defaultJournal
+    let measurements = toMeasurements (H.jpricedirectives journal) (H.jtxns journal)
+    for_ measurements (uncurry writeMeasurement)
+
+writeMeasurement :: T.Text -> [I.Line UTCTime] -> IO ()
+writeMeasurement name ms = do
     putStrLn ("Writing " <> T.unpack name <> " (" <> show (length ms) <> " measurements)")
-    for_ (chunksOf 300 ms) (I.writeBatch (I.writeParams "finance"))
-  putStrLn "Done"
+    for_ (zip [1..] chunks) $ \(i, chunk) -> do
+      putStrLn ("  " <> show i <> " / " <> show numChunks)
+      I.writeBatch (I.writeParams "finance") chunk
+  where
+    chunks = chunksOf chunkSize ms
+    numChunks = length chunks
+    chunkSize = 200 -- picked by trial and error, needs shrinking occasionally
 
 toMeasurements
   :: [H.PriceDirective] -> [H.Transaction] -> [(T.Text, [I.Line UTCTime])]
