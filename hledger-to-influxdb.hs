@@ -28,8 +28,7 @@ import           Hledger.Read       as H
 
 main :: IO ()
 main = do
-    journal <- H.defaultJournal
-    let measurements = toMeasurements (H.jpricedirectives journal) (H.jtxns journal)
+    measurements <- toMeasurements <$> H.defaultJournal
     for_ measurements (uncurry writeMeasurement)
 
 writeMeasurement :: T.Text -> [I.Line UTCTime] -> IO ()
@@ -43,9 +42,8 @@ writeMeasurement name ms = do
     numChunks = length chunks
     chunkSize = 200 -- picked by trial and error, needs shrinking occasionally
 
-toMeasurements
-  :: [H.PriceDirective] -> [H.Transaction] -> [(T.Text, [I.Line UTCTime])]
-toMeasurements prices txns =
+toMeasurements :: H.Journal -> [(T.Text, [I.Line UTCTime])]
+toMeasurements journal =
   [ ("Normal-value daily aggregate transactions", measurements nvalue dailies)
   , ("Cost-value daily aggregate transactions", measurements cvalue dailies)
   , ("Market-value daily aggregate transactions", measurements mvalue dailies)
@@ -60,15 +58,15 @@ toMeasurements prices txns =
   cvalue = balancesToInflux costValue "cost"
   mvalue = toInflux accountKey marketValues (toValueDeltas normalValue) "market"
 
+  -- one transaction per day, with empty days getting an empty transaction
+  dailies :: [H.Transaction]
   dailies =
-    let allTxns = sortOn H.tdate (sortedTxns ++ emptyTransactionsFromTo epoch today)
+    let allTxns = sortOn H.tdate (txns ++ emptyTransactionsFromTo startDate endDate)
         squish ts@(t:|_) = t { H.tpostings = concatMap H.tpostings ts }
     in map squish (groupBy ((==) `on` H.tdate) allTxns)
 
-  epoch = H.tdate (head sortedTxns)
-  today = H.tdate (last sortedTxns)
-  sortedTxns = sortOn H.tdate txns
-
+  -- transactions grouped by period, excluding the final period
+  periods :: [NonEmpty H.Transaction]
   periods = init $ groupBy ((==) `on` (periodOf . H.tdate)) txns
 
   -- this isn't just `map` as it includes all accounts in all
@@ -86,6 +84,16 @@ toMeasurements prices txns =
           | status <- [minBound .. maxBound]
           ]
     in toInflux fromText (\_ ac q -> [(ac, q)]) toCount "count"
+
+  startDate, endDate :: Day
+  startDate = H.tdate (head txns)
+  endDate = H.tdate (last txns)
+
+  txns :: [H.Transaction]
+  txns = sortOn H.tdate (H.jtxns journal)
+
+  prices :: [H.PriceDirective]
+  prices = H.jpricedirectives journal
 
 toInflux
   :: Ord k
