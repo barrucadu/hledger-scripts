@@ -1,178 +1,37 @@
 hledger-scripts
 ===============
 
-Helpful scripts to do things with your [hledger][] data.  I use these
-to supply data to a [grafana][] dashboard.
+## This repository is archived!
 
-![Example Dashboard](dashboard.png)
+These scripts are pretty complicated.  This isn't ideal, but it's
+necessary: InfluxDB 1 doesn't have a very good query language, so
+`hledger-to-influxdb` needs to do a lot of work to mangle the data
+into a format I can do what I want with.
 
+But every time I want to do something new with the data, I need to go
+change the script.  And occasionally the script fails because it times
+out uploading all the data to InfluxDB.
 
-hledger-to-influxdb
--------------------
+I realised I could do much less pre-processing, dramatically
+simplifying the script and making it more reliable, if I migrated to a
+timeseries database with a more powerful query language.  The obvious
+choices were InfluxDB 2 and Prometheus.
 
-Copies your hledger data to an [influxdb][] database called "finance".
+InfluxDB 2 is very different, and I don't use it at work or in any
+other projects, I would be learning it just to create one dashboard.
+That wasn't very appealing.
 
-**Dependencies:** [influxdb][] and [stack][].
+Prometheus is something I already use for monitoring my personal
+things, and I use it at work too.  But I couldn't figure out how to
+get my historic data into it.
 
-**Usage:**
+Now I've solved that problem.  I found [promscale][], a
+Prometheus-compatible timeseries database which supports bulk
+importing old data.
 
-```bash
-$ influx
-> drop database finance;
-> create database finance;
+So these scripts are **no longer used**.  Go see [my new, much
+simpler, script][] which is written in Python and uses `hledger print
+-O csv` rather than interfacing with the hledger library.
 
-$ ./hledger-to-influxdb.hs
-```
-
-Emptying, or recreating, the "finance" database is necessary, as this
-writes *all* the data, regardless of whether it already exists.
-
-This uses the default journal file, which is `~/.hledger.journal`.  To
-use a different one, set the `LEDGER_FILE` environment variable.
-
-**Output:**
-
-This gives you a collection of measurements in your database.  These
-are:
-
-- `normal`, which is the value of each account at the end of every day
-- `cost`, which is the value (cost basis) of each account at the end of every day
-- `market`, which is the value (market basis) of each account at the end of every day
-- `period`, which is the end-of-month total income and expenses (market basis)
-- `count`, which is the total number of transactions
-- `commodities`, which is the market value of each commodity
-
-There is one `normal`, `cost`, and `market` measurement for each day
-from the 1st of January to the final transaction in the journal.
-
-Inside these measurements are values for accounts and currencies.
-It's probably easiest to explore these through a tool
-like [grafana][].
-
-I find `normal` value is good for tracking cash in my wallet; `cost`
-value is good for tracking my budget; and `market` value is good for
-tracking my net worth.  I usually use `dailies` rather than `txns`, to
-avoid weird spikes if there are multiple transactions on the same day.
-I usually use `total` for account stats, and `delta` for transaction
-stats.
-
-
-market-prices
--------------
-
-Downloads market values of commodities from a few different sources.
-
-**Dependencies:** [python][] 3.
-
-**Usage:**
-
-```bash
-$ cd market-prices
-
-$ ./market-prices.py < commodities.json
-```
-
-**Configuration:**
-
-The `commodities.json` file specifies what to download.  It is an
-object where keys are commodities, and values are configuration for
-how to get the current value.
-
-Here is an example showing off all of the options:
-
-```json
-{ "commodities":
-  { "BTC":   { "provider": "coinbase", "currency": "USD" }
-  , "ETH":   { "provider": "coinbase" }
-  , "LTC":   { "provider": "coinbase" }
-  , "Euro":  { "provider": "ft_currency", "base": "EUR" }
-  , "JPY":   { "provider": "ft_currency" }
-  , "VADEA": { "provider": "ft_fund", "isin": "GB00B41XG308" }
-  }
-, "symbols":
-  { "GBP": "£"
-  , "USD": "$"
-  }
-}
-```
-
-There are three providers:
-
-- `coinbase`, spot price from coinbase.  Arguments are:
-  - `base`, the name of the cryptocoin (defaults to the commodity
-    name)
-  - `currency`, the currency to get the spot price in (defaults to
-    "GBP")
-- `ft_currency`, exchange rate from Financial Times.  Arguments are:
-  - `base`, the name of the foreign currency (defaults to the
-    commodity name)
-  - `currency`, the currency to get the exchange rate in (defaults to
-    "GBP")
-- `ft_fund`, fund NAV from Financial Times.  Arguments are:
-  - `isin`, the ISIN of the fund (defaults to the commodity name)
-  - `currency`, the currency to get the NAV in (defaults to "GBP")
-
-**Output:**
-
-This gives a sequence of hledger market price directives like so:
-
-```
-P 2018-05-26 BTC $7536.47
-P 2018-05-26 ETH £450.84
-P 2018-05-26 LTC £90.95
-P 2018-05-26 Euro £0.8752
-P 2018-05-26 JPY £0.0069
-P 2018-05-26 VADEA £212.16
-```
-
-The optional `symbols` object in the configuration maps currency names
-to prefix symbols.
-
-Any errors are printed as an [hledger][] comment.  For example, if the
-ISIN for VADEA were incorrect:
-
-```
-P 2018-05-26 BTC $7536.47
-P 2018-05-26 ETH £450.84
-P 2018-05-26 LTC £90.95
-P 2018-05-26 Euro £0.8752
-P 2018-05-26 JPY £0.0069
-; error processing commodity 'VADEA': could not find price
-```
-
-So there is no danger (in terms of producing an invalid journal) in
-having a cronjob to run this script and append the results to a file;
-you'll just need to manually fix any errors.
-
-
-aggregate-fundingcircle
------------------------
-
-Aggregates interest payments and fees from a [Funding Circle][]
-statement into totals.  Downloads market values of commodities from a
-few different sources.
-
-**Dependencies:** none.
-
-**Usage:**
-
-```bash
-$ ./aggregate-fundingcircle.sh path/to/statement.csv
-```
-
-**Output:**
-
-```
-interest: 832
-fees:     78
-```
-
-The aggregates are in pence.
-
-
-[hledger]: http://hledger.org/
-[grafana]: https://grafana.com/
-[stack]: https://docs.haskellstack.org/en/stable/README/
-[influxdb]: https://www.influxdata.com/
-[python]: https://www.python.org/
-[Funding Circle]: https://www.fundingcircle.com/uk/
+[promscale]: https://github.com/timescale/promscale
+[my new, much simpler, script]: https://github.com/barrucadu/nixfiles/blob/ba59fce93c1bf615fde1a7556d39b5faebe29914/hosts/nyarlathotep/jobs/hledger-export-to-promscale.py
